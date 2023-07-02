@@ -1,0 +1,205 @@
+---
+title: "EDS 222: Assignment 03 (due: Nov 1, 9am)"
+author: "{STUDENT NAME}"
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: default
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load all the packages needed here
+library(tidyverse)
+library(readr)
+library(gt)
+library(tufte)
+library(modelr)
+library(knitr)
+library(xtable)
+library(openintro)
+library(patchwork)
+
+# Set your filepath here! Or, set this up as an .Rproj if you'd like.
+rootdir <- ("/Users/andrewbartnik/Desktop/MEDS/fall/stats")
+datadir <- file.path(rootdir,"data","HW3")
+setwd(file.path(rootdir,"homework","assignment-03-andrewbartnik"))
+```
+
+# Question 1: Some math with Ordinary Least Squares
+
+We will rely on `R` to implement all the heavy lifting of OLS, but it's essential that you understand what is happening beneath the hood of canned linear regression commands so that you can accurately design, execute, and interpret regressions. These questions ask you to probe the algebra of least squares so that you can see some of the mechanics behind `lm()` and other linear regression packages in `R` and beyond.
+
+Consider a simple linear regression model:
+
+$$y_i = \beta_0 + \beta_1 x_i + u_i$$ Recall the definitions of the OLS estimate of the intercept and slope coefficients:
+
+$$\hat{\beta}_1 = \dfrac{\sum_i (x_i - \overline{x})(y_i - \overline{y})}{\sum_i (x_i - \overline{x})^2} = \frac{cov(x,y)}{var(x)}$$
+
+$$ \hat{\beta}_0 = \overline{y} - \hat{\beta}_1 \overline{x} $$ Using these definitions, show mathematically how $\hat\beta_0$ and $\hat\beta_1$ change under the following scenarios.[^1] Give some intuition for your answers. If your answers differ across scenarios, why do they? If not, why not?
+
+[^1]: Note that these kinds of scenarios occur in practice all the time when we change units of measurement.
+
+-   Scenario 1: all observations of the independent variable are multiplied by 3
+
+    $$
+    =\frac{cov(3x,y)}{var(3x)} = \frac{3cov(x,y)}{9var(x)} = \frac{1cov(x,y)}{3var(x)} = \frac{1}{3}\hat{\beta}_1
+    $$
+
+    -   **The slope coefficient is reduced by a factor of 3 while the intercept does not change. Since we haven't touched the y values - this is what we expect**
+
+        $$ = \overline{y} - \frac{1}{3}\hat{\beta}_1 3\overline{x} = \overline{y} - \hat{\beta}_1 \overline{x} = \hat{\beta}_0 $$
+
+        **After plugging our**$\frac{1}{3}\hat{\beta}_1$**in for**$\hat{\beta}_1$**we see that multiplying the independent variable in the**$\hat{\beta}_0$**expression by 3 cancels out with our 1/3 coefficient for**$\hat{\beta}_1$ **.This is exactly what we expected.**
+
+-   Scenario 2: all observations of the dependent variable are multiplied by 3
+
+    $$
+    =\frac{cov(x,3y)}{var(x)} = \frac{3cov(x,y)}{var(x)}  = 3\hat{\beta}_1
+    $$
+
+    -   **Our slope is increased by a factor of 3**
+
+    $$ = 3\overline{y} - 3\hat{\beta}_1 \overline{x} = 3(\overline{y} - \hat{\beta}_1 \overline{x}) = 3\hat{\beta}_0 $$
+
+    -   **Our intercept increases by a factor of 3**
+    -   **Since we're scaling the amount that x and y vary together by a factor of 3, we expect the new slope of our** $\hat{\beta}_1$ **to also be mulitplied by a factor of 3. Unlike in the previous problem, we're also scaling up the value of the dependent variable by 3, so we should expect that the intercept is also multiplied by a factor of 3**
+
+-   Scenario 3: All observations of both the independent and dependent variables are multiplied by 3
+
+    $$
+    =\frac{cov(3x,3y)}{var(3x)} = \frac{9cov(x,y)}{9var(x)} = \frac{cov(x,y)}{var(x)} = \hat{\beta}_1
+    $$
+
+    -   **Our slope remains the same**
+
+        $$ = 3\overline{y} - 3\hat{\beta}_1 \overline{x} = 3(\overline{y} - \hat{\beta}_1 \overline{x}) = 3\hat{\beta}_0 $$
+
+        **But our intercept is scaled up by a factor of 3**
+
+    -   **Our slope remains the same since we're scaling both x and y by the same factor. However since we're still scaling y up by a factor of 3 we expect our intercept to also scale up by a factor of 3.**
+
+# Question 2: Forest fires and temperature
+
+The data provided for this assignment, called `forestfires.rds`, is a dataset of daily forest fire area burned in the northeast region of Portugal and meteorological conditions on the recorded day (data was constructed from [here](http://www3.dsi.uminho.pt/pcortez/forestfires/)). The goal of assembling this dataset was to evaluate if weather conditions, such as temperature and air humidity, can predict area burned and inform fire management decisions. Each observation is a daily observation of forest fire area burned and set of associated daily weather variables, all of which are detailed in the provided README.txt file.
+
+The original documentation of the dataset can be found in [Cortez and Morais, 2007](http://www3.dsi.uminho.pt/pcortez/fires.pdf). For more information on the other variables from the Fire Weather Index (FWI), please see [here](https://www.nwcg.gov/publications/pms437/cffdrs/fire-weather-index-system#TOC-FWI-Fuel-Moisture-Codes).
+
+## Question 2.1
+
+In this homework, we are interested in the relationship between temperature and area burned.
+
+-   To begin to understand this relationship, make a scatter plot showing area burned ($y$-axis) as it relates to temperature ($x$-axis) and discuss the general relationship. Do you see a positive or negative correlation? Does that make intuitive sense to you? How strong does the correlation appear to be?
+
+    -   **There does appear to be a noticable correlation between area burned and temperature. This makes intuitive sense at first glance - as the air temperature increases we would also expect the area burned to increase.**
+
+```{r}
+ff <- read_rds(file.path(datadir, 'forestfires.rds'))
+
+ggplot(ff, aes(x = temp, y = area)) + 
+  geom_point() +
+  theme_minimal()
+
+```
+
+## Question 2.2
+
+Use the `lm()` command to estimate the following simple linear regression:
+
+$$ \text{area_burned}_i = \beta_0 + \beta_1 \text{temp}_i + \varepsilon_i $$ Display your estimated intercept and slope coefficients using `summary()`, `gt()`, or `kable()`. Interpret each coefficient in words, and then answer the following:
+
+**For the intercept coefficient, we expect that, on a day where the temperature is 0 degrees Celsius, the burned area is \~14.78 hectares per day. For the temperature coefficient, we interpret that for each 1ºC increase, we expect 12.26 more hectares to burn.**
+
+-   How many hectares do you predict will be burned on a day that is 1 degrees Celsius?
+
+    -   **On a day where the temp is 1ºC, on average, we expect the area burned to be about 14.78 hectares + 1\* (12.26) = about 27 hectares burned**
+
+-   How many hectares do you predict will be burned on a day that is 28 degrees Celsius?
+
+    -   **On a day where the temp is 27ºC, on average, we expect the area burned to be about 14.78 hectares + 28\* (12.26) = about 358 hectares burned**
+
+-   How many more hectares do you predict will be burned on a day in winter at 12 degrees Celsius as compared to a hot summer day at 30 degrees Celsius?
+
+    -   **On a winter day where the temp is 12ºC, on average, we expect the area burned to be about 14.78 hectares + 12\* (12.26) = about 162 hectares burned.**
+    -   **On a summer day where the temp is 30ºC, on average, we expect the area burned to be about 14.78 hectares + 30\* (12.26) = \~382 hectares burned.**
+    -   **So, we expect that the 30ºC summer day will burn (382-152) = 220 more hectares than the 12º winter day.**
+
+```{r}
+model <- lm(area ~ temp, data = ff)
+
+summary(model)
+
+```
+
+## Question 2.3
+
+The `area` variable covers a range of zero to 1371.923 (units: hectares). Based on the math you showed in Question 1, how do you expect your coefficients to change if you rescale this variable to acres (one hectare is about 2.47 acres)?
+
+**Much like in question 1, since we're scaling both the independent variable and the dependent variable, we expect both our slope and intercept coefficients to also multiply by 2.47.**
+
+Implement this rescaling and show your new coefficients. Does your math align with your new coefficients?
+
+**Our coefficients change in the way we expect**
+
+```{r}
+ff <- ff |> 
+  mutate(area_acres = area*2.47)
+
+model2 <- lm(area_acres ~ temp, data = ff)
+summary(model2) |> 
+  xtable() |> 
+  kable()
+
+```
+
+## Question 2.4
+
+Using your original regression model with the original `temp` variable, use `geom_smooth()` in `ggplot()` to visualize your regression line, overlaid on your scatter plot. Use `se=FALSE` to suppress standard errors; we will dig into those soon!
+
+How well do you think your model is fitting the data?
+
+**Our model does a mediocre job at fitting the data**
+
+```{r}
+
+ggplot(ff, aes(x = temp, y = area)) + 
+  geom_smooth(method = 'lm', formula = y ~ x, se = FALSE) + 
+  geom_point(data = ff, aes(x = temp, y = area), alpha = 0.3)
+
+```
+
+Compute the coefficient of determination ($R^2$), or report it based on the regression results you saved above. What percent of variation in area burned are explained by temperature? Does this align with your intuition based on the scatter plot?
+
+**According to our r2, about 28 % of the variation in our area burnedlis explained by the temperature, this does align with our intuition of the weakly correlated scatter-plot**
+
+```{r}
+summary(model)$r.squared
+```
+
+## Question 2.5
+
+Due to complex climatological phenomena, days with high temperatures tend to coincide with days that are also different in other dimensions. For example, hot days tend to be less rainy, with lower wind, and of higher or lower humidity, depending on the geographic location. This raises the concern of **omitted variables bias**, as these variables may also be correlated with area burned.
+
+To address this concern, add relative humidity (`RH`) as an independent variable to your linear regression model, in addition to temperature. Display your estimated intercept and slope coefficients using `summary()`, `gt()`, or `kable()`. Interpret your slope coefficient on temperature in words.
+
+-   Why is your coefficient similar or different from the estimate you recovered above in the simple linear regression?
+
+    **The r2 is almost identical to our previous models. The intercept is much lower, but the temp coefficient is very similar to our previous model. When RH and temperature are 0, we expect -15 acres to burn. When we hold RH constant, we expect \~12.9 more acres to burn per each 1ºC increase in temperature. When we hold temperature constant, we expect \~0.41 more acres to burn per 1 unit increase in RH.**
+
+-   Is there evidence of omitted variables bias?
+
+    **When we include RH in the regression, we see that the coefficient for the intercept changes, but the coefficient on temperature remains largely unchanged, meaning that we are not seeing any omitted variables bias.**
+
+**Answer:**
+
+```{r}
+model3 <- lm(area ~ temp + RH, data = ff)
+summary(model3) |> 
+  xtable() |> 
+  kable()
+```
